@@ -1,21 +1,27 @@
 import SwiftUI
+import AVFoundation
+import UIKit
 
 struct ContentView: View {
     let rows = 6
     let columns = 7
     let cellSpacing: CGFloat = 4
 
-    @State private var grid: [[Character]] = ContentView.makeEmptyGrid()
-    @State private var currentPlayer: Character = "R"
+    @State private var board = GameBoard()
+    @State private var currentPlayer: Player = .red
     @State private var animatingCell: (row: Int, col: Int)? = nil
     @State private var dropInProgress = false
-    @State private var bounceOffset: CGFloat = 0
+    @State private var winner: Player? = nil
+    @State private var isDraw: Bool = false
+    @State private var fallingOffset: CGFloat = -1000
+    @State private var gameOver = false
 
     var body: some View {
         GeometryReader { geometry in
-            let availableWidth = geometry.size.width - 40
-            let cellSize = (availableWidth - CGFloat(columns - 1) * cellSpacing) / CGFloat(columns)
-            let boardHeight = cellSize * CGFloat(rows) + CGFloat(rows - 1) * cellSpacing
+            let totalSpacing = CGFloat(columns - 1) * cellSpacing
+            let gridWidth = geometry.size.width * 0.9
+            let cellSize = (gridWidth - totalSpacing) / CGFloat(columns)
+            let boardHeight = CGFloat(rows) * cellSize + CGFloat(rows - 1) * cellSpacing
 
             VStack(spacing: 20) {
                 Text("Connect 4")
@@ -32,51 +38,66 @@ struct ContentView: View {
 
                     if let (row, col) = animatingCell {
                         let xOffset = CGFloat(col) * (cellSize + cellSpacing) + 10
-                        let yBase = CGFloat(row) * (cellSize + cellSpacing) + 10
+                        let yFinal = CGFloat(row) * (cellSize + cellSpacing) + 10
 
                         Circle()
-                            .fill(color(for: currentPlayer))
+                            .fill(color(for: currentPlayer.symbol))
                             .frame(width: cellSize, height: cellSize)
-                            .offset(x: xOffset, y: yBase + bounceOffset)
+                            .offset(x: xOffset, y: fallingOffset)
                             .onAppear {
-                                // Start with off-screen drop
-                                bounceOffset = -UIScreen.main.bounds.height
-
-                                // Animate falling
+                                // Start above and animate down to target
+                                fallingOffset = -UIScreen.main.bounds.height
                                 withAnimation(.easeOut(duration: 0.35)) {
-                                    bounceOffset = 0
-                                }
-
-                                // Animate bounce
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                                    withAnimation(.interpolatingSpring(stiffness: 100, damping: 8)) {
-                                        bounceOffset = -12
-                                    }
-
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                                        withAnimation(.interpolatingSpring(stiffness: 80, damping: 10)) {
-                                            bounceOffset = 0
-                                        }
-                                    }
+                                    fallingOffset = yFinal
                                 }
                             }
                     }
                 }
-                .frame(width: availableWidth, height: boardHeight)
+                .frame(width: gridWidth, height: boardHeight)
+                .frame(maxWidth: .infinity) // Centers ZStack in VStack
 
+                if let winner {
+                    Text("\(winner.colourName) Wins!")
+                        .font(.title2)
+                        .foregroundColor(color(for: winner.symbol))
+                        .padding(.top, 10)
+                }
+                if isDraw {
+                    Text("🤝 It's a draw!")
+                        .font(.title2)
+                        .foregroundColor(.gray)
+                        .padding(.top, 10)
+                }
+                if winner != nil || isDraw {
+                    Button("Play Again") {
+                        board = GameBoard()
+                        currentPlayer = .red
+                        animatingCell = nil
+                        winner = nil
+                        isDraw = false
+                    }
+                    .padding(.top, 5)
+                }
+                
                 Spacer()
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity) // Fills GeometryReader
             .padding()
         }
     }
+    
+    private func isAnimatingCell(row: Int, col: Int) -> Bool {
+        animatingCell?.row == row && animatingCell?.col == col
+    }
 
+    // MARK: - Grid UI
     private func gridView(cellSize: CGFloat) -> some View {
         VStack(spacing: cellSpacing) {
             ForEach(0..<rows, id: \.self) { row in
                 HStack(spacing: cellSpacing) {
                     ForEach(0..<columns, id: \.self) { col in
                         Circle()
-                            .fill(color(for: grid[row][col]))
+                            .fill(isAnimatingCell(row: row, col: col) ? Color.gray.opacity(0.3) : color(for: board.grid[row][col]))
                             .frame(width: cellSize, height: cellSize)
                             .onTapGesture {
                                 handleTap(column: col)
@@ -87,31 +108,48 @@ struct ContentView: View {
         }
     }
 
+    // MARK: - Drop Handler
     private func handleTap(column: Int) {
-        guard animatingCell == nil else { return } // Prevent multiple simultaneous drops
+        guard winner == nil else { return }
+        guard animatingCell == nil else { return } // 👈 this prevents rapid taps
+        guard !board.isFull() || winner != nil else { return }
 
-        for row in (0..<rows).reversed() {
-            if grid[row][column] == " " {
-                animatingCell = (row, column)
-                dropInProgress = false
+        if let row = board.dropPiece(in: column, for: currentPlayer) {
+            animatingCell = (row, column)
 
-                // Start the animation after a brief moment
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                    dropInProgress = true
+            // Predict outcome BEFORE animation
+            let isWin = board.hasWon(for: currentPlayer)
+            let isBoardFull = board.isFull()
 
-                    // After animation completes, update board and switch player
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                        grid[row][column] = currentPlayer
-                        animatingCell = nil
-                        dropInProgress = false
-                        currentPlayer = (currentPlayer == "R") ? "Y" : "R"
-                    }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                animatingCell = nil
+
+                if isWin {
+                    winner = currentPlayer
+                    playSystemWinFeedback()
+                } else if isBoardFull {
+                    isDraw = true
+                    playSystemWinFeedback()
+                } else {
+                    currentPlayer = currentPlayer.next()
                 }
-                break
             }
         }
     }
 
+    // MARK: - Bounce Animation
+    private func bounce(after delay: Double = 0.35) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            withAnimation(.interpolatingSpring(stiffness: 70, damping: 9)) {
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                withAnimation(.interpolatingSpring(stiffness: 50, damping: 8)) {
+                }
+            }
+        }
+    }
+
+    // MARK: - Piece Color
     private func color(for symbol: Character) -> Color {
         switch symbol {
         case "R": return .red
@@ -119,9 +157,14 @@ struct ContentView: View {
         default: return .gray.opacity(0.3)
         }
     }
+    
+    func playSystemWinFeedback() {
+        // Default "new mail" sound (just an example, can be replaced with others)
+        AudioServicesPlaySystemSound(1004) // Choose another ID if you want a different effect
 
-    private static func makeEmptyGrid() -> [[Character]] {
-        Array(repeating: Array(repeating: " ", count: 7), count: 6)
+        // Haptic feedback
+        let generator = UINotificationFeedbackGenerator()
+        generator.notificationOccurred(.success)
     }
 }
 

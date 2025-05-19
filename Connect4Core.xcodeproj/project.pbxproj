@@ -23,9 +23,22 @@
 		49A3F63B2DDAEE48006B3AC5 /* Connect4GUI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Connect4GUI.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		490E99172DDB7072009351F2 /* Exceptions for "Connect4Core" folder in "Connect4GUI" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				main.swift,
+			);
+			target = 49A3F63A2DDAEE48006B3AC5 /* Connect4GUI */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		4950E3562DDA80C80053348E /* Connect4Core */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				490E99172DDB7072009351F2 /* Exceptions for "Connect4Core" folder in "Connect4GUI" target */,
+			);
 			path = Connect4Core;
 			sourceTree = "<group>";
 		};
@@ -110,6 +123,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
+				4950E3562DDA80C80053348E /* Connect4Core */,
 				49A3F63C2DDAEE48006B3AC5 /* Connect4GUI */,
 			);
 			name = Connect4GUI;

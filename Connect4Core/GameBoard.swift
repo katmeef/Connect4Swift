@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct GameBoard {
+public struct GameBoard {
     // 1. 2D array for the board: 6 rows × 7 columns
     let rows: Int
     let columns: Int
