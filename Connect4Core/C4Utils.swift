@@ -74,10 +74,8 @@ func getMove(for player: Player,
     
     
     if vsAI, let level = difficulty, player == aiPlayer {
-        // Call AI
-        // TODO: Implement AI logic based on difficulty
-        print("AI Level (\(level.description)) is thinking... (placeholder)")
-        return Int.random(in: 0..<board.columns)
+        print("🧠 AI (\(level.description)) is thinking...")
+        return C4AI.getBestMove(board: board, ai: player, difficulty: level)
     } else {
         // Human input
         while true {
@@ -96,34 +94,3 @@ func getMove(for player: Player,
     }
 }
 
-func takeTurn(currentPlayer: inout Player,
-              board: inout GameBoard,
-              vsAI: Bool,
-              aiPlayer: Player?,
-              difficulty: Difficulty?) -> Bool {
-    // 1. prompt for move (AI or Human depending on currentPlayer)
-    let move = getMove(
-        for: currentPlayer,
-        using: board,
-        vsAI: vsAI,
-        aiPlayer: aiPlayer,
-        difficulty: difficulty
-    )
-    // 2. try to drop the piece
-    guard board.dropPiece(in: move, for: currentPlayer) != nil else {
-        fatalError("Tried to drop a piece in a full column. This shouldn't happen.")
-    }
-    board.printBoard()
-    // 3. check win/draw
-    if board.hasWon(for: currentPlayer) {
-        print("🎉 \(currentPlayer.colourName) wins!")
-        return false
-    } else if board.isFull() {
-        print("🤝 It's a draw!")
-        return false
-    } else {
-        // 4. switch players
-        currentPlayer = currentPlayer.next()
-        return true
-    }
-}
