@@ -4,10 +4,11 @@
 //
 //  Created by katmeef on 2025-05-18.
 //
-
+let debugMode = false
 import Foundation
 
 struct C4AI {
+    
     
     static let depthMap: [Difficulty: Int] = [
         // .easy is handled separately
@@ -24,7 +25,9 @@ struct C4AI {
                 fatalError("No valid moves available for AI.")
             }
             let chosen = validColumns.randomElement()!
-            debugPrint("[AI Easy] Chose column: \(chosen + 1)")
+            if debugMode {
+                debugPrint("[AI Easy] Chose column: \(chosen + 1)")
+            }
             return chosen
         }
         
@@ -41,8 +44,9 @@ struct C4AI {
             ai: ai,
             human: ai.next()
         )
-        
-        debugPrint("[AI \(difficulty.description)] Chose column: \(bestColumn + 1)")
+        if debugMode {
+            debugPrint("[AI \(difficulty.description)] Chose column: \(bestColumn + 1)")
+        }
         return bestColumn
     }
     
@@ -88,7 +92,9 @@ struct C4AI {
                     }
 
                     if beta <= alpha {
-                        debugPrint("🔪 Pruned branch at column \(col + 1)")
+                        if debugMode {
+                            debugPrint("🔪 Pruned branch at column \(col + 1)")
+                        }
                         break
                     }
                 }
@@ -114,7 +120,9 @@ struct C4AI {
             return (-100_000, -1)
         } else if depth == 0 || board.isFull() {
             let score = evaluateBoard(board, aiPlayer: ai, opponent: human)
-            debugPrint("📄 Leaf heuristic: \(score)")
+            if debugMode {
+                debugPrint("📄 Leaf heuristic: \(score)")
+            }
             return (score, -1)
         }
 
