@@ -7,9 +7,11 @@
 
 import Foundation
 
-enum Difficulty {
+enum Difficulty: String, CaseIterable, Identifiable {
     case easy, medium, hard, insane
-    
+
+    var id: String { self.rawValue }
+
     var description: String {
         switch self {
         case .easy: return "Easy"

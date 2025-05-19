@@ -6,9 +6,11 @@ struct ContentView: View {
     let rows = 6
     let columns = 7
     let cellSpacing: CGFloat = 4
-
+    
+    let settings: GameSettings
+    
     @State private var board = GameBoard()
-    @State private var currentPlayer: Player = .red
+    @State private var currentPlayer: Player
     @State private var animatingCell: (row: Int, col: Int)? = nil
     @State private var dropInProgress = false
     @State private var winner: Player? = nil
@@ -16,10 +18,25 @@ struct ContentView: View {
     @State private var fallingOffset: CGFloat = -1000
     @State private var gameOver = false
 
+    let vsAI: Bool
+    let aiPlayer: Player
+    let difficulty: Difficulty
+    
+    init(settings: GameSettings) {
+        self.settings = settings
+        _currentPlayer = State(initialValue: settings.isVsAI ? settings.humanPlayer : .red)
+        
+        // Safe to access now
+        self.vsAI = settings.isVsAI
+        self.aiPlayer = settings.humanPlayer.next()
+        self.difficulty = settings.aiDifficulty
+    }
+   
     var body: some View {
         GeometryReader { geometry in
+            let availableWidth = geometry.size.width
             let totalSpacing = CGFloat(columns - 1) * cellSpacing
-            let gridWidth = geometry.size.width * 0.9
+            let gridWidth = max(availableWidth * 0.9, 300) // fallback to 300 if needed
             let cellSize = (gridWidth - totalSpacing) / CGFloat(columns)
             let boardHeight = CGFloat(rows) * cellSize + CGFloat(rows - 1) * cellSpacing
 
@@ -132,6 +149,10 @@ struct ContentView: View {
                     playSystemWinFeedback()
                 } else {
                     currentPlayer = currentPlayer.next()
+                    // 👇 Trigger AI if needed
+                    if vsAI && currentPlayer == aiPlayer {
+                        performAIMove()
+                    }
                 }
             }
         }
@@ -166,8 +187,22 @@ struct ContentView: View {
         let generator = UINotificationFeedbackGenerator()
         generator.notificationOccurred(.success)
     }
+    
+    private func performAIMove() {
+        // Simulate AI thinking delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            let move = C4AI.getBestMove(board: board, ai: aiPlayer, difficulty: difficulty)
+            handleTap(column: move)
+        }
+    }
 }
 
+
+
 #Preview {
-    ContentView()
+    ContentView(settings: GameSettings(
+        isVsAI: true,
+        humanPlayer: .red,
+        aiDifficulty: .medium
+    ))
 }
