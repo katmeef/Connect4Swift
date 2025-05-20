@@ -11,26 +11,13 @@ struct C4AI {
     
     
     static let depthMap: [Difficulty: Int] = [
-        // .easy is handled separately
+        .easy: 1,
         .medium: 3,
         .hard: 5,
         .insane: 7
     ]
     
     static func getBestMove(board: GameBoard, ai: Player, difficulty: Difficulty) -> Int {
-        // Easy: pick a random valid column
-        if difficulty == .easy {
-            let validColumns = getValidColumns(from: board)
-            guard !validColumns.isEmpty else {
-                fatalError("No valid moves available for AI.")
-            }
-            let chosen = validColumns.randomElement()!
-            if debugMode {
-                debugPrint("[AI Easy] Chose column: \(chosen + 1)")
-            }
-            return chosen
-        }
-        
         guard let depth = depthMap[difficulty] else {
             preconditionFailure("Unhandled difficulty level: \(difficulty)")
         }
@@ -70,6 +57,12 @@ struct C4AI {
         for col in 0..<board.columns {
             if board.grid[0][col] == " " {
                 if let copy = simulateDrop(board: board, in: col, as: currentPlayer) {
+                    // 👇 NEW: Check for immediate win for the player who just moved
+                    if copy.hasWon(for: currentPlayer) {
+                        let eval = currentPlayer == ai ? 100_000 : -100_000
+                        return (eval, col)
+                    }
+                    
                     let (eval, _) = minimax(
                         board: copy,
                         depth: depth - 1,

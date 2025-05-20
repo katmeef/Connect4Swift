@@ -17,10 +17,14 @@ struct ContentView: View {
     @State private var isDraw: Bool = false
     @State private var fallingOffset: CGFloat = -1000
     @State private var gameOver = false
-
+    @State private var aiIsThinking = false
+    
+    @Environment(\.presentationMode) var presentationMode
+    
     let vsAI: Bool
     let aiPlayer: Player
     let difficulty: Difficulty
+    
     
     init(settings: GameSettings) {
         self.settings = settings
@@ -31,82 +35,145 @@ struct ContentView: View {
         self.aiPlayer = settings.humanPlayer.next()
         self.difficulty = settings.aiDifficulty
     }
-   
+    
     var body: some View {
         GeometryReader { geometry in
-            let availableWidth = geometry.size.width
             let totalSpacing = CGFloat(columns - 1) * cellSpacing
-            let gridWidth = max(availableWidth * 0.9, 300) // fallback to 300 if needed
-            let cellSize = (gridWidth - totalSpacing) / CGFloat(columns)
+            let availableWidth = geometry.size.width * 0.9
+            let availableHeight = geometry.size.height * 0.75
+
+            let maxCellWidth = (availableWidth - totalSpacing) / CGFloat(columns)
+            let maxCellHeight = (availableHeight - CGFloat(rows - 1) * cellSpacing) / CGFloat(rows)
+
+            let cellSize = min(maxCellWidth, maxCellHeight)
+
+            let gridWidth = CGFloat(columns) * cellSize + totalSpacing
             let boardHeight = CGFloat(rows) * cellSize + CGFloat(rows - 1) * cellSpacing
-
+            let isLandscape = geometry.size.width > geometry.size.height
+            
             VStack(spacing: 20) {
-                Text("Connect 4")
-                    .font(.largeTitle)
-                    .padding(.top)
+                if isLandscape {
+                    HStack {
+                        Spacer()
+                        VStack(spacing: 4) {
+                            Text("Connect 4")
+                                .font(.largeTitle)
+                        }
+                        .frame(width: gridWidth, alignment: .center)
+                        Spacer()
+                    }
 
-                ZStack(alignment: .topLeading) {
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.black, lineWidth: 2)
-                        .background(Color.white.cornerRadius(12))
+                    HStack(alignment: .center, spacing: 12) {
+                        VStack {
+                            gameBoardView(gridWidth: gridWidth, boardHeight: boardHeight, cellSize: cellSize)
+                        }
+                        .frame(width: gridWidth)
 
-                    gridView(cellSize: cellSize)
-                        .padding(10)
+                        statusPanel()
+                            .frame(minWidth: 200, idealWidth: 220, maxWidth: 260)
+                    }
 
-                    if let (row, col) = animatingCell {
-                        let xOffset = CGFloat(col) * (cellSize + cellSpacing) + 10
-                        let yFinal = CGFloat(row) * (cellSize + cellSpacing) + 10
+                    Spacer()
+                } else {
+                    VStack {
+                        Spacer(minLength: 40)
 
-                        Circle()
-                            .fill(color(for: currentPlayer.symbol))
-                            .frame(width: cellSize, height: cellSize)
-                            .offset(x: xOffset, y: fallingOffset)
-                            .onAppear {
-                                // Start above and animate down to target
-                                fallingOffset = -UIScreen.main.bounds.height
-                                withAnimation(.easeOut(duration: 0.35)) {
-                                    fallingOffset = yFinal
-                                }
-                            }
+                        Text("Connect 4")
+                            .font(.largeTitle)
+
+                        gameBoardView(gridWidth: gridWidth, boardHeight: boardHeight, cellSize: cellSize)
+
+                        ZStack {
+                            Color.clear.frame(height: 60) // 👈 Reserve space even when no status text
+                            statusPanel()
+                        }
+
+                        Spacer()
                     }
                 }
-                .frame(width: gridWidth, height: boardHeight)
-                .frame(maxWidth: .infinity) // Centers ZStack in VStack
-
-                if let winner {
-                    Text("\(winner.colourName) Wins!")
-                        .font(.title2)
-                        .foregroundColor(color(for: winner.symbol))
-                        .padding(.top, 10)
-                }
-                if isDraw {
-                    Text("🤝 It's a draw!")
-                        .font(.title2)
-                        .foregroundColor(.gray)
-                        .padding(.top, 10)
-                }
-                if winner != nil || isDraw {
-                    Button("Play Again") {
-                        board = GameBoard()
-                        currentPlayer = .red
-                        animatingCell = nil
-                        winner = nil
-                        isDraw = false
-                    }
-                    .padding(.top, 5)
-                }
-                
-                Spacer()
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity) // Fills GeometryReader
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding()
+            .navigationBarBackButtonHidden(true)
+            
         }
+    }
+    
+    private func gameBoardView(gridWidth: CGFloat, boardHeight: CGFloat, cellSize: CGFloat) -> some View {
+        ZStack(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(uiColor: .systemBackground))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.secondary, lineWidth: 2)
+                )
+
+            gridView(cellSize: cellSize)
+                .padding(10)
+                .disabled(inputLocked)
+                .opacity(inputLocked ? 0.5 : 1.0)
+
+            if let (row, col) = animatingCell {
+                let xOffset = CGFloat(col) * (cellSize + cellSpacing) + 10
+                let yFinal = CGFloat(row) * (cellSize + cellSpacing) + 10
+
+                Circle()
+                    .fill(color(for: currentPlayer.symbol))
+                    .frame(width: cellSize, height: cellSize)
+                    .offset(x: xOffset, y: fallingOffset)
+                    .onAppear {
+                        fallingOffset = -UIScreen.main.bounds.height
+                        withAnimation(.easeOut(duration: 0.35)) {
+                            fallingOffset = yFinal
+                        }
+                    }
+            }
+        }
+        .frame(width: gridWidth, height: boardHeight, alignment: .center)
+        .frame(maxWidth: .infinity, alignment: .center) // ✅ Center horizontally
+    }
+    
+    @ViewBuilder
+    private func statusPanel() -> some View {
+        VStack(spacing: 12) {
+            if aiIsThinking {
+                Text("🤖 AI is thinking…")
+                    .foregroundColor(.gray)
+                    .font(.subheadline)
+            }
+
+            if let winner {
+                Text("\(winner.colourName) Wins!")
+                    .font(.title2)
+                    .foregroundColor(color(for: winner.symbol))
+            }
+
+            if isDraw {
+                Text("🤝 It's a draw!")
+                    .font(.title2)
+                    .foregroundColor(.gray)
+            }
+
+            if winner != nil || isDraw {
+                Button("Play Again") {
+                    board = GameBoard()
+                    currentPlayer = settings.isVsAI ? settings.humanPlayer : .red
+                    animatingCell = nil
+                    winner = nil
+                    isDraw = false
+                }
+                Button("Back to Setup") {
+                    presentationMode.wrappedValue.dismiss()
+                }
+            }
+        }
+        .padding()
     }
     
     private func isAnimatingCell(row: Int, col: Int) -> Bool {
         animatingCell?.row == row && animatingCell?.col == col
     }
-
+    
     // MARK: - Grid UI
     private func gridView(cellSize: CGFloat) -> some View {
         VStack(spacing: cellSpacing) {
@@ -124,23 +191,23 @@ struct ContentView: View {
             }
         }
     }
-
+    
     // MARK: - Drop Handler
     private func handleTap(column: Int) {
         guard winner == nil else { return }
-        guard animatingCell == nil else { return } // 👈 this prevents rapid taps
+        guard !inputLocked else { return }  // 👈 NEW: prevent input during animation or AI turn
         guard !board.isFull() || winner != nil else { return }
-
+        
         if let row = board.dropPiece(in: column, for: currentPlayer) {
             animatingCell = (row, column)
-
+            
             // Predict outcome BEFORE animation
             let isWin = board.hasWon(for: currentPlayer)
             let isBoardFull = board.isFull()
-
+            
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                 animatingCell = nil
-
+                
                 if isWin {
                     winner = currentPlayer
                     playSystemWinFeedback()
@@ -148,6 +215,7 @@ struct ContentView: View {
                     isDraw = true
                     playSystemWinFeedback()
                 } else {
+                    AudioServicesPlaySystemSound(1104) // Tock sound
                     currentPlayer = currentPlayer.next()
                     // 👇 Trigger AI if needed
                     if vsAI && currentPlayer == aiPlayer {
@@ -157,7 +225,7 @@ struct ContentView: View {
             }
         }
     }
-
+    
     // MARK: - Bounce Animation
     private func bounce(after delay: Double = 0.35) {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
@@ -169,7 +237,7 @@ struct ContentView: View {
             }
         }
     }
-
+    
     // MARK: - Piece Color
     private func color(for symbol: Character) -> Color {
         switch symbol {
@@ -182,24 +250,39 @@ struct ContentView: View {
     func playSystemWinFeedback() {
         // Default "new mail" sound (just an example, can be replaced with others)
         AudioServicesPlaySystemSound(1004) // Choose another ID if you want a different effect
-
+        
         // Haptic feedback
         let generator = UINotificationFeedbackGenerator()
         generator.notificationOccurred(.success)
     }
     
     private func performAIMove() {
-        // Simulate AI thinking delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+        aiIsThinking = true
+        let startTime = Date()
+        
+        DispatchQueue.global().async {
             let move = C4AI.getBestMove(board: board, ai: aiPlayer, difficulty: difficulty)
-            handleTap(column: move)
+            let elapsed = Date().timeIntervalSince(startTime)
+            
+            // Minimum display delay
+            let minDelay: Double = 0.5
+            let remainingDelay = max(minDelay - elapsed, 0)
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + remainingDelay) {
+                aiIsThinking = false
+                handleTap(column: move)
+            }
         }
+    }
+    
+    private var inputLocked: Bool {
+        animatingCell != nil || aiIsThinking
     }
 }
 
 
 
-#Preview {
+#Preview(traits: .landscapeLeft) {
     ContentView(settings: GameSettings(
         isVsAI: true,
         humanPlayer: .red,
